@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilda sandbox — AB Marine hero</title>
+<!-- имитация типовых глобальных стилей Tilda: проверяем изоляцию блока -->
+<style>
+  html,body{margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#000;background:#fff}
+  a{color:#c00;text-decoration:underline}
+  h1,h2,p,ul{margin:0 0 1em}
+  *{box-sizing:content-box}
+  .t-rec{position:relative;width:100%}
+  .t-container{max-width:1200px;margin:0 auto;padding:0 20px}
+  .t-title{font-size:34px;font-weight:700;text-align:center}
+  .t-menu{position:sticky;top:0;z-index:900;background:#fff;border-bottom:1px solid #ddd;
+    display:flex;gap:24px;align-items:center;height:64px;padding:0 20px;font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="t-rec t-menu"><b>Меню Tilda</b><a href="#">Пункт 1</a><a href="#">Пункт 2</a></div>
+
+<div class="t-rec" id="rec1">
+  <!-- ↓↓↓ содержимое блока T123 ↓↓↓ -->
+  <!--#include abmarine-hero.tilda.html -->
+  <!-- ↑↑↑ -->
+</div>
+
+<div class="t-rec"><div class="t-container">
+  <h2 class="t-title">Следующий блок Tilda</h2>
+  <p>Проверка: типографика и ссылки ниже блока не должны измениться.</p>
+  <p><a href="#">Обычная ссылка Tilda</a></p>
+</div></div>
+
+<script>
+fetch('abmarine-hero.tilda.html').then(r => r.text()).then(html => {
+  const rec = document.getElementById('rec1');
+  // в песочнице подставляем локальный кадр вместо адреса Tilda
+  html = html.replaceAll('ЗАМЕНИТЕ_НА_АДРЕС_КАРТИНКИ_В_TILDA', '../assets/ship/hero-vessel.webp');
+  rec.innerHTML = html;
+  // innerHTML не исполняет <script> — переносим вручную, как это делает Tilda
+  rec.querySelectorAll('script').forEach(old => {
+    const s = document.createElement('script');
+    s.textContent = old.textContent;
+    old.replaceWith(s);
+  });
+});
+</script>
+</body>
+</html>

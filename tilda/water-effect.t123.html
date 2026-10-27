@@ -1,0 +1,322 @@
+<!-- TS-Water: интерактивный эффект волны на картинке. Вставить в блок T123 (HTML-код).
+     Как включить на элементе: Zero Block -> выделить картинку -> вкладка "Класс" (CSS class) -> water-img
+     Или на обычном блоке с фоном: Настройки блока -> CSS class -> water-img -->
+<script>
+/* Water ripple effect for Tilda — WebGL, no dependencies */
+(function () {
+  var CFG = {
+    selector: '.water-img',   // элементы-хосты
+    sim: 256,                 // разрешение симуляции волн (по длинной стороне)
+    steps: 2,                 // шагов симуляции за кадр = скорость волны
+    damping: 0.996,           // затухание (0.99 быстро … 0.999 долго)
+    dropRadius: 0.05,         // размер капли от курсора
+    dropStrength: 0.035,      // сила капли от курсора
+    refraction: 0.22,         // сила преломления
+    specular: 0.18,           // блик на гребнях
+    rain: false,              // капли сами по себе
+    rainEveryMs: 1200,
+    maxDpr: 2
+  };
+
+  var VERT =
+    'attribute vec2 p;varying vec2 vUv;' +
+    'void main(){vUv=p*0.5+0.5;gl_Position=vec4(p,0.0,1.0);}';
+
+  var SIM =
+    'precision highp float;varying vec2 vUv;' +
+    'uniform sampler2D uPrev;uniform vec2 uTexel;uniform vec2 uDrop;' +
+    'uniform float uDropR,uDropS,uDamp;uniform vec2 uAspect;' +
+    'void main(){' +
+    ' vec4 c=texture2D(uPrev,vUv);' +
+    ' float sum=texture2D(uPrev,vUv+vec2(uTexel.x,0.0)).r' +
+    '  +texture2D(uPrev,vUv-vec2(uTexel.x,0.0)).r' +
+    '  +texture2D(uPrev,vUv+vec2(0.0,uTexel.y)).r' +
+    '  +texture2D(uPrev,vUv-vec2(0.0,uTexel.y)).r;' +
+    ' float h=sum*0.5-c.g;' +
+    ' h*=uDamp;' +
+    ' if(uDrop.x>=0.0){' +
+    '  float d=distance((vUv-uDrop)*uAspect,vec2(0.0));' +
+    '  h+=uDropS*smoothstep(uDropR,0.0,d);' +
+    ' }' +
+    ' gl_FragColor=vec4(h,c.r,0.0,1.0);' +
+    '}';
+
+  var DRAW =
+    'precision highp float;varying vec2 vUv;' +
+    'uniform sampler2D uSim,uImg;uniform vec2 uTexel,uCover;' +
+    'uniform float uRefr,uSpec;' +
+    'void main(){' +
+    ' float hx=texture2D(uSim,vUv+vec2(uTexel.x,0.0)).r-texture2D(uSim,vUv-vec2(uTexel.x,0.0)).r;' +
+    ' float hy=texture2D(uSim,vUv+vec2(0.0,uTexel.y)).r-texture2D(uSim,vUv-vec2(0.0,uTexel.y)).r;' +
+    ' vec2 uv=vUv+vec2(hx,hy)*uRefr;' +
+    ' vec2 iuv=(uv-0.5)*uCover+0.5;' +
+    ' vec3 col=texture2D(uImg,clamp(iuv,0.0,1.0)).rgb;' +
+    ' col+=uSpec*(hx+hy)*3.0;' +
+    ' gl_FragColor=vec4(col,1.0);' +
+    '}';
+
+  function compile(gl, type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn('[water] shader', gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  }
+
+  function program(gl, fsrc) {
+    var p = gl.createProgram();
+    var v = compile(gl, gl.VERTEX_SHADER, VERT);
+    var f = compile(gl, gl.FRAGMENT_SHADER, fsrc);
+    if (!v || !f) return null;
+    gl.attachShader(p, v);
+    gl.attachShader(p, f);
+    gl.bindAttribLocation(p, 0, 'p');
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      console.warn('[water] link', gl.getProgramInfoLog(p));
+      return null;
+    }
+    return p;
+  }
+
+  /* источник картинки: Tilda bg, <img>, или css background-image */
+  function findSrc(host) {
+    var bg = host.querySelector('.t-bgimg');
+    if (bg) {
+      var s = bg.getAttribute('data-original') || bg.getAttribute('src');
+      if (s) return s;
+    }
+    var img = host.querySelector('img');
+    if (img && (img.currentSrc || img.src)) return img.currentSrc || img.src;
+    var css = getComputedStyle(host).backgroundImage;
+    var m = css && css.match(/url\(["']?(.+?)["']?\)/);
+    return m ? m[1] : null;
+  }
+
+  function init(host) {
+    if (host.__water) return;
+    var src = findSrc(host);
+    if (!src) return;
+    host.__water = true;
+
+    var canvas = document.createElement('canvas');
+    canvas.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;';
+    if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+    host.appendChild(canvas);
+
+    var gl =
+      canvas.getContext('webgl2', { antialias: false, alpha: false }) ||
+      canvas.getContext('webgl', { antialias: false, alpha: false });
+    if (!gl) { canvas.remove(); return; }
+
+    var isGl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+    var type, internal;
+    if (isGl2) {
+      if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) {
+        canvas.remove(); return;
+      }
+      type = gl.HALF_FLOAT; internal = gl.RGBA16F;
+    } else {
+      var ext = gl.getExtension('OES_texture_half_float');
+      if (!ext) { canvas.remove(); return; }
+      gl.getExtension('OES_texture_half_float_linear');
+      type = ext.HALF_FLOAT_OES; internal = gl.RGBA;
+    }
+
+    var pSim = program(gl, SIM), pDraw = program(gl, DRAW);
+    if (!pSim || !pDraw) { canvas.remove(); return; }
+
+    var quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    var SW = CFG.sim, SH = CFG.sim;
+    function simTex() {
+      var t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, SW, SH, 0, gl.RGBA, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      var fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return ok ? { t: t, fb: fb } : null;
+    }
+    var a = simTex(), b = simTex();
+    if (!a || !b) { canvas.remove(); return; }
+
+    function resizeSim(aspect) {
+      var w2, h2;
+      if (aspect >= 1) { w2 = CFG.sim; h2 = Math.max(64, Math.round(CFG.sim / aspect)); }
+      else { h2 = CFG.sim; w2 = Math.max(64, Math.round(CFG.sim * aspect)); }
+      if (w2 === SW && h2 === SH) return;
+      SW = w2; SH = h2;
+      [a, b].forEach(function (o) { gl.deleteTexture(o.t); gl.deleteFramebuffer(o.fb); });
+      a = simTex(); b = simTex();
+    }
+
+    var imgTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, imgTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([0, 0, 0, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    var imgW = 1, imgH = 1, ready = false;
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      imgW = img.naturalWidth; imgH = img.naturalHeight;
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      ready = true;
+      canvas.style.opacity = '1';
+    };
+    img.onerror = function () { canvas.remove(); };
+    img.src = src;
+
+    var uSim = {
+      prev: gl.getUniformLocation(pSim, 'uPrev'),
+      texel: gl.getUniformLocation(pSim, 'uTexel'),
+      drop: gl.getUniformLocation(pSim, 'uDrop'),
+      r: gl.getUniformLocation(pSim, 'uDropR'),
+      aspect: gl.getUniformLocation(pSim, 'uAspect'),
+      s: gl.getUniformLocation(pSim, 'uDropS'),
+      d: gl.getUniformLocation(pSim, 'uDamp')
+    };
+    var uDraw = {
+      sim: gl.getUniformLocation(pDraw, 'uSim'),
+      img: gl.getUniformLocation(pDraw, 'uImg'),
+      texel: gl.getUniformLocation(pDraw, 'uTexel'),
+      cover: gl.getUniformLocation(pDraw, 'uCover'),
+      refr: gl.getUniformLocation(pDraw, 'uRefr'),
+      spec: gl.getUniformLocation(pDraw, 'uSpec')
+    };
+
+    var w = 1, h = 1;
+    function resize() {
+      var dpr = Math.min(window.devicePixelRatio || 1, CFG.maxDpr);
+      var r = host.getBoundingClientRect();
+      w = Math.max(1, Math.round(r.width * dpr));
+      h = Math.max(1, Math.round(r.height * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+      }
+      resizeSim(w / h);
+    }
+    window.addEventListener('resize', resize);
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
+
+    var pending = [];
+    function addDrop(x, y, strength, radius) {
+      pending.push([x, y, strength === undefined ? CFG.dropStrength : strength,
+        radius === undefined ? CFG.dropRadius : radius]);
+      if (pending.length > 6) pending.shift();
+    }
+
+    var lastX = null, lastY = null;
+    host.addEventListener('pointermove', function (e) {
+      var r = host.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width;
+      var y = 1 - (e.clientY - r.top) / r.height;
+      if (x < 0 || x > 1 || y < 0 || y > 1) return;
+      var v = (lastX === null) ? 0 : Math.hypot(x - lastX, y - lastY);
+      lastX = x; lastY = y;
+      addDrop(x, y, CFG.dropStrength * Math.min(1, 0.35 + v * 12));
+    }, { passive: true });
+    host.addEventListener('pointerdown', function (e) {
+      var r = host.getBoundingClientRect();
+      addDrop((e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height,
+        CFG.dropStrength * 3, CFG.dropRadius * 1.6);
+    }, { passive: true });
+
+    if (CFG.rain) {
+      setInterval(function () {
+        addDrop(Math.random(), Math.random(), CFG.dropStrength * 1.6, CFG.dropRadius * 0.8);
+      }, CFG.rainEveryMs);
+    }
+
+    var visible = true;
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(function (es) { visible = es[0].isIntersecting; })
+        .observe(host);
+    }
+
+    function step(drop) {
+      gl.useProgram(pSim);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, b.fb);
+      gl.viewport(0, 0, SW, SH);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, a.t);
+      gl.uniform1i(uSim.prev, 0);
+      gl.uniform2f(uSim.texel, 1 / SW, 1 / SH);
+      gl.uniform2f(uSim.aspect, SW >= SH ? SW / SH : 1, SH > SW ? SH / SW : 1);
+      gl.uniform1f(uSim.d, CFG.damping);
+      if (drop) {
+        gl.uniform2f(uSim.drop, drop[0], drop[1]);
+        gl.uniform1f(uSim.s, drop[2]);
+        gl.uniform1f(uSim.r, drop[3]);
+      } else {
+        gl.uniform2f(uSim.drop, -1, -1);
+        gl.uniform1f(uSim.s, 0);
+        gl.uniform1f(uSim.r, 1);
+      }
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      var t = a; a = b; b = t;
+    }
+
+    function frame() {
+      requestAnimationFrame(frame);
+      if (!ready || !visible) return;
+      resize();
+
+      var drop = pending.length ? pending.shift() : null;
+      if (pending.length > 2) pending.length = 0;
+      for (var i = 0; i < CFG.steps; i++) step(i === 0 ? drop : null);
+
+      gl.useProgram(pDraw);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, w, h);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, a.t);
+      gl.uniform1i(uDraw.sim, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.uniform1i(uDraw.img, 1);
+      gl.uniform2f(uDraw.texel, 1 / SW, 1 / SH);
+      var ca = w / h, ia = imgW / imgH;
+      gl.uniform2f(uDraw.cover, ca > ia ? 1 : ca / ia, ca > ia ? ia / ca : 1);
+      gl.uniform1f(uDraw.refr, CFG.refraction);
+      gl.uniform1f(uDraw.spec, CFG.specular);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function boot() {
+    var list = document.querySelectorAll(CFG.selector);
+    for (var i = 0; i < list.length; i++) init(list[i]);
+  }
+
+  window.TS_WATER = { config: CFG, boot: boot };
+
+  if (document.readyState !== 'loading') boot();
+  else document.addEventListener('DOMContentLoaded', boot);
+  setTimeout(boot, 800);   // Tilda догружает блоки лениво
+})();
+</script>

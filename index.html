@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AB Marine — судовое энергетическое оборудование</title>
+<meta name="description" content="АБ Марин: комплексные решения для судов — проектирование, подбор и поставка судового энергетического оборудования, пуско-наладка и сервис. Санкт-Петербург.">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@200;300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/hero.css">
+</head>
+<body>
+
+<!--ABM:START-->
+<div id="abmHero">
+
+<!--ABM:HDR-->
+<!-- ─────────── ШАПКА (в сборке для Tilda вырезается: там своё меню) ─────────── -->
+<header class="hdr" id="abmHdr">
+  <div class="shell hdr__in">
+    <a class="logo" href="/" aria-label="AB Marine — на главную">
+      <span class="logo__mark" aria-hidden="true">AB</span>
+      <span class="logo__word">MARINE</span>
+      <span class="logo__tag">Энергия<br>больших возможностей</span>
+    </a>
+
+    <nav class="hdr__nav" aria-label="Основная навигация">
+      <a href="#about">О компании</a>
+      <a href="#catalog">Каталог</a>
+      <a href="#footer">Контакты</a>
+    </nav>
+
+    <div class="hdr__right">
+      <a class="hdr__tel" href="tel:+78126434211">8 812 643-42-11</a>
+      <a class="btn btn--pill js-cta" href="#formblock">
+        <span>Оставить заявку</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <button class="burger" id="abmBurger" aria-label="Меню" aria-expanded="false"><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+<!--/ABM:HDR-->
+
+<!-- ─────────────────────────── ПЕРВЫЙ ЭКРАН ─────────────────────────── -->
+<section class="hero" id="abmHero-sec">
+
+  <div class="hero__bg" aria-hidden="true"></div>
+  <div class="hero__sea" aria-hidden="true"></div>
+  <div class="hero__haze" aria-hidden="true"></div>
+
+  <!-- текстовый блок -->
+  <div class="shell hero__grid">
+    <div class="hero__copy">
+      <h1 class="h1">
+        <span class="h1__eyebrow">Судовое энергетическое оборудование</span>
+        <span class="h1__a">Энергия</span>
+        <span class="h1__b">для движения</span>
+      </h1>
+
+      <p class="lead">Комплексные решения для судов — от проектирования
+        и подбора оборудования до пуско-наладки и сервиса.</p>
+
+      <div class="cta">
+        <a class="btn btn--pill btn--lg js-cta" href="#catalog">
+          <span>Подобрать оборудование</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <!-- Иконка = стрелка к разделу, не «play»: видео у компании пока нет.
+             Появится ролик — верните треугольник M9 6.5l9 5.5-9 5.5z, а href
+             замените на ссылку на видео. -->
+        <a class="play" href="#about">
+          <span class="play__btn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v13M6.5 12.5L12 18.5l5.5-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="play__txt">О компании<br>направления и опыт</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- сцена: судно в разрезе + живой энергоконтур -->
+  <div class="stage" id="abmStage">
+    <div class="plate" id="abmPlate">
+      <img class="plate__img" id="abmPlateImg" src="assets/ship/hero-vessel.webp"
+           alt="Судно в разрезе: главные двигатели, дизель-генератор, система накопления энергии, главный распределительный щит и гребной электродвигатель"
+           decoding="async" fetchpriority="high">
+      <!-- энергоконтур рисуется скриптом в координатах кадра 1995 × 825 -->
+      <div class="plate__fx" id="abmFx" aria-hidden="true"></div>
+      <div class="plate__scan" aria-hidden="true"></div>
+      <!-- живые подписи: обычный HTML-текст, масштабируется и индексируется -->
+      <div class="plate__pins" id="abmPins"></div>
+      <div class="lens" id="abmLens" aria-hidden="true">
+        <svg viewBox="0 0 200 200"><circle class="lens__ring" cx="100" cy="100" r="94"/><g class="lens__ticks" id="abmLensTicks"></g></svg>
+        <span class="lens__tag">наведите на узел</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero__floor" aria-hidden="true"></div>
+
+  <!-- нижняя строка -->
+  <div class="hero__foot">
+    <div class="shell hero__foot-in">
+      <!-- Всё с abmarine.ru. Цифр вида «15 лет / 300 проектов» на сайте нет —
+           появятся подтверждённые, меняются здесь же. Порядок важен:
+           на планшете видны первые три, на мобильном — первые две. -->
+      <ul class="stats">
+        <li><b>6</b><span>направлений оборудования</span></li>
+        <li><b>Полный цикл</b><span>от проектирования до сервиса</span></li>
+        <li><b>СПб</b><span>ул. Кожевенная, 30</span></li>
+        <li><b>Пн–Пт</b><span>9:30 – 18:30</span></li>
+      </ul>
+      <a class="scroll" href="#catalog"><span>Листайте вниз</span><i></i></a>
+    </div>
+  </div>
+
+  <div class="cursor" id="abmCursor" aria-hidden="true"></div>
+</section>
+
+</div>
+<!--ABM:END-->
+
+<script src="assets/js/hero.js"></script>
+</body>
+</html>
